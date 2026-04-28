@@ -1,0 +1,54 @@
+{
+  "glm": {
+    "settings": {
+      "env": {
+        "ANTHROPIC_AUTH_TOKEN": "",
+        "ANTHROPIC_BASE_URL": "",
+        "ANTHROPIC_MODEL": "",
+        "ANTHROPIC_SMALL_FAST_MODEL": "",
+        "ANTHROPIC_CUSTOM_MODEL_OPTION": "",
+        "ANTHROPIC_CUSTOM_MODEL_OPTION_NAME": "GLM"
+      }
+    },
+    "global": {}
+  },
+  "minimax": {
+    "settings": {
+      "env": {
+        "ANTHROPIC_AUTH_TOKEN": "",
+        "ANTHROPIC_BASE_URL": "",
+        "ANTHROPIC_MODEL": "",
+        "ANTHROPIC_SMALL_FAST_MODEL": "",
+        "ANTHROPIC_CUSTOM_MODEL_OPTION": "",
+        "ANTHROPIC_CUSTOM_MODEL_OPTION_NAME": "MiniMax"
+      }
+    },
+    "global": {}
+  },
+  "local": {
+    "settings": {
+      "env": {
+        "ANTHROPIC_AUTH_TOKEN": "",
+        "ANTHROPIC_BASE_URL": "http://localhost:3000",
+        "ANTHROPIC_MODEL": "",
+        "ANTHROPIC_SMALL_FAST_MODEL": "",
+        "ANTHROPIC_CUSTOM_MODEL_OPTION": "",
+        "ANTHROPIC_CUSTOM_MODEL_OPTION_NAME": "Local"
+      }
+    },
+    "global": {}
+  },
+  "deepseek": {
+    "settings": {
+      "env": {
+        "ANTHROPIC_AUTH_TOKEN": "",
+        "ANTHROPIC_BASE_URL": "",
+        "ANTHROPIC_MODEL": "",
+        "ANTHROPIC_SMALL_FAST_MODEL": "",
+        "ANTHROPIC_CUSTOM_MODEL_OPTION": "",
+        "ANTHROPIC_CUSTOM_MODEL_OPTION_NAME": "DeepSeek"
+      }
+    },
+    "global": {}
+  }
+}

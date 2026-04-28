@@ -1,0 +1,183 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+REAL_HOME="${CLAUDE_REAL_HOME:-$HOME}"
+PROFILES_DIR="${CLAUDE_PROFILES_DIR:-$REAL_HOME/.claude-profiles}"
+CONFIG_FILE="${CLAUDE_PROVIDERS_CONFIG:-$PROFILES_DIR/providers.json}"
+CLAUDE_BIN="${CLAUDE_CODE_BIN:-$(command -v claude || true)}"
+
+command_name="$(basename "$0")"
+provider="${1:-}"
+
+case "$command_name" in
+  ccglm) provider="glm" ;;
+  ccminimax) provider="minimax" ;;
+  cclocal) provider="local" ;;
+  ccdeepseek) provider="deepseek" ;;
+esac
+
+if [[ "$command_name" == "cc-provider" ]]; then
+  if [[ -z "$provider" || "$provider" == "-h" || "$provider" == "--help" ]]; then
+    cat <<EOF
+Usage:
+  cc-provider <provider> [claude args...]
+  ccglm [claude args...]
+  ccminimax [claude args...]
+  cclocal [claude args...]
+  ccdeepseek [claude args...]
+
+Config:
+  $CONFIG_FILE
+
+Provider schema:
+  {
+    "glm": {
+      "settings": {
+        "env": {
+          "ANTHROPIC_AUTH_TOKEN": "...",
+          "ANTHROPIC_BASE_URL": "...",
+          "ANTHROPIC_MODEL": "..."
+        }
+      },
+      "global": {}
+    }
+  }
+
+Legacy top-level environment variables are still supported.
+EOF
+    exit 0
+  fi
+  shift
+fi
+
+if [[ -z "$provider" ]]; then
+  echo "Missing provider. Use one of: glm, minimax, local, deepseek." >&2
+  exit 2
+fi
+
+if [[ ! -f "$CONFIG_FILE" ]]; then
+  echo "Config file not found: $CONFIG_FILE" >&2
+  echo "Copy providers.example.json to $CONFIG_FILE and fill in your provider settings." >&2
+  exit 2
+fi
+
+if ! command -v jq >/dev/null 2>&1; then
+  echo "jq is required to read $CONFIG_FILE." >&2
+  exit 2
+fi
+
+if [[ -z "$CLAUDE_BIN" || ! -x "$CLAUDE_BIN" ]]; then
+  echo "Claude binary not found or not executable." >&2
+  echo "Install Claude Code or set CLAUDE_CODE_BIN=/path/to/claude." >&2
+  exit 2
+fi
+
+if ! jq -e --arg provider "$provider" 'has($provider) and (.[$provider] | type == "object")' "$CONFIG_FILE" >/dev/null; then
+  echo "Provider '$provider' is not configured in $CONFIG_FILE." >&2
+  exit 2
+fi
+
+profile_home="$PROFILES_DIR/homes/$provider"
+mkdir -p "$profile_home/.claude"
+
+settings_file="$profile_home/.claude/settings.json"
+global_file="$profile_home/.claude.json"
+
+merge_json_file() {
+  local target_file="$1"
+  local desired_file="$2"
+  local merged_file
+
+  if [[ ! -s "$desired_file" ]] || jq -e '. == null or . == {}' "$desired_file" >/dev/null; then
+    return 0
+  fi
+
+  merged_file="$(mktemp)"
+  if [[ -f "$target_file" ]]; then
+    jq -s '.[0] * .[1]' "$target_file" "$desired_file" > "$merged_file"
+  else
+    jq '.' "$desired_file" > "$merged_file"
+  fi
+
+  mkdir -p "$(dirname "$target_file")"
+  mv "$merged_file" "$target_file"
+}
+
+desired_settings="$(mktemp)"
+jq --arg provider "$provider" '
+  def reserved_keys:
+    ["env", "settings", "global", "claudeJson", "files", "home"];
+
+  def clean_env:
+    with_entries(
+      select(.key | test("^[A-Za-z_][A-Za-z0-9_]*$"))
+      | select(.value != null)
+      | select(.value != "")
+    );
+
+  def legacy_env:
+    with_entries(
+      select(.key as $key | (reserved_keys | index($key) | not))
+      | select(.key | test("^[A-Za-z_][A-Za-z0-9_]*$"))
+      | select(.value != null)
+      | select(.value != "")
+    );
+
+  .[$provider] as $p
+  | (if ($p.settings | type) == "object" then $p.settings else {} end) as $settings
+  | (($p | legacy_env) + (if ($p.env | type) == "object" then ($p.env | clean_env) else {} end) + (if ($settings.env | type) == "object" then ($settings.env | clean_env) else {} end)) as $env
+  | $settings + (if ($env | length) > 0 then {env: $env} else {} end)
+' "$CONFIG_FILE" > "$desired_settings"
+merge_json_file "$settings_file" "$desired_settings"
+rm -f "$desired_settings"
+
+desired_global="$(mktemp)"
+jq --arg provider "$provider" '
+  .[$provider]
+  | if (.global | type) == "object" then .global
+    elif (.claudeJson | type) == "object" then .claudeJson
+    else {}
+    end
+' "$CONFIG_FILE" > "$desired_global"
+merge_json_file "$global_file" "$desired_global"
+rm -f "$desired_global"
+
+while IFS='=' read -r key value; do
+  if [[ ! "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+    echo "Invalid environment variable name for provider '$provider': $key" >&2
+    exit 2
+  fi
+  export "$key=$value"
+done < <(
+  jq -r --arg provider "$provider" '
+    def reserved_keys:
+      ["env", "settings", "global", "claudeJson", "files", "home"];
+
+    def clean_env:
+      with_entries(
+        select(.key | test("^[A-Za-z_][A-Za-z0-9_]*$"))
+        | select(.value != null)
+        | select(.value != "")
+      );
+
+    def legacy_env:
+      with_entries(
+        select(.key as $key | (reserved_keys | index($key) | not))
+        | select(.key | test("^[A-Za-z_][A-Za-z0-9_]*$"))
+        | select(.value != null)
+        | select(.value != "")
+      );
+
+    .[$provider] as $p
+    | ($p | legacy_env)
+      + (if ($p.env | type) == "object" then ($p.env | clean_env) else {} end)
+      + (if ($p.settings.env | type) == "object" then ($p.settings.env | clean_env) else {} end)
+    | to_entries[]
+    | "\(.key)=\(.value | tostring)"
+  ' "$CONFIG_FILE"
+)
+
+export HOME="$profile_home"
+export CLAUDE_PROVIDER="$provider"
+
+exec "$CLAUDE_BIN" "$@"
