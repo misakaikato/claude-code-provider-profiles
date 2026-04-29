@@ -1,8 +1,8 @@
 # Claude Code Provider Profiles
 
-Run multiple Claude Code provider profiles on the same machine without their
-`/model` choices, `settings.json`, or provider environment variables leaking
-into each other.
+Run multiple Claude Code provider profiles on the same machine at the same
+time, without their `/model` choices, `settings.json`, or provider environment
+variables leaking into each other.
 
 [中文文档](./README.zh-CN.md)
 
@@ -13,8 +13,14 @@ such as `.claude/settings.json` and `.claude.json`. If several provider-backed
 Claude Code launchers share the same `HOME`, a `/model` change in one session
 can affect another session.
 
-This project solves that by launching Claude Code with an isolated `HOME` for
-each provider:
+Provider switchers are useful when you want one active Claude Code provider at
+a time. This project is different: it is designed for concurrent sessions. You
+can keep GLM, MiniMax, DeepSeek, and a local gateway running in separate
+terminals, and each running Claude Code process keeps its own provider config
+and `/model` state.
+
+This project solves that by launching Claude Code with a different isolated
+`HOME` for each provider:
 
 ```text
 ~/.claude-profiles/homes/glm/.claude/settings.json
@@ -25,6 +31,38 @@ each provider:
 
 The official `claude` command is not changed. It keeps using your normal
 default Claude Code configuration.
+
+## Difference From CCSwitch
+
+CCSwitch-style workflows are switch-based: you choose which provider config is
+active, then launch or continue using Claude Code from that active config. That
+is simple and works well for serial usage.
+
+Claude Code Provider Profiles is profile-based: each provider command launches
+Claude Code inside its own home directory. The result is that multiple provider
+instances can stay alive at once:
+
+```bash
+# Terminal 1
+ccglm
+
+# Terminal 2
+ccminimax
+
+# Terminal 3
+cclocal
+```
+
+If you run `/model` inside the GLM session, only the GLM profile is changed. The
+MiniMax and local sessions keep their own model choices because their
+`.claude/settings.json` files are different files.
+
+| Use case | CCSwitch-style switching | This project |
+| --- | --- | --- |
+| Use one provider at a time | Yes | Yes |
+| Keep several provider sessions running together | Not the main model | Yes |
+| Avoid `/model` leaking between running sessions | Depends on shared state | Yes, isolated per provider |
+| Leave official `claude` untouched | Depends on setup | Yes |
 
 ## Commands
 
