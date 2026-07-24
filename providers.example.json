@@ -50,5 +50,18 @@
       }
     },
     "global": {}
+  },
+  "kimi": {
+    "settings": {
+      "env": {
+        "ANTHROPIC_AUTH_TOKEN": "",
+        "ANTHROPIC_BASE_URL": "",
+        "ANTHROPIC_MODEL": "",
+        "ANTHROPIC_SMALL_FAST_MODEL": "",
+        "ANTHROPIC_CUSTOM_MODEL_OPTION": "",
+        "ANTHROPIC_CUSTOM_MODEL_OPTION_NAME": "Kimi"
+      }
+    },
+    "global": {}
   }
 }

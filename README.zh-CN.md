@@ -16,14 +16,20 @@ Claude Code 会把用户级状态写到当前 `HOME` 下，比如 `.claude/setti
 DeepSeek、本地网关等 Claude Code 会话，并且每个正在运行的实例都有自己的供应商
 配置和 `/model` 状态。
 
-这个工具的做法是：每个供应商启动 Claude Code 时都使用不同的独立 `HOME`：
+这个工具的做法是：每个供应商用不同的 `CLAUDE_CONFIG_DIR`（官方的配置目录
+覆盖变量）启动 Claude Code：
 
 ```text
 ~/.claude-profiles/homes/glm/.claude/settings.json
 ~/.claude-profiles/homes/minimax/.claude/settings.json
 ~/.claude-profiles/homes/local/.claude/settings.json
 ~/.claude-profiles/homes/deepseek/.claude/settings.json
+~/.claude-profiles/homes/kimi/.claude/settings.json
 ```
+
+真实 `HOME` 保持不变，所以每个供应商会话里 git、SSH、shell 配置、Keychain
+都正常可用。（早期版本是替换 `HOME` 实现的；目录布局没有变化，启动器会自动
+迁移旧位置的 `.claude.json`。）
 
 官方默认的 `claude` 命令不会被修改，仍然使用你原来的默认 Claude Code 配置。
 
@@ -66,6 +72,7 @@ ccglm
 ccminimax
 cclocal
 ccdeepseek
+cckimi
 ```
 
 也可以使用通用启动器：
@@ -75,6 +82,7 @@ cc-provider glm
 cc-provider minimax
 cc-provider local
 cc-provider deepseek
+cc-provider kimi
 ```
 
 额外参数会原样透传给 Claude Code：
@@ -161,8 +169,38 @@ cp providers.example.json ~/.claude-profiles/providers.json
 启动器不会移动或修改默认的 `~/.claude` 文件夹。它只使用
 `~/.claude-profiles/homes/` 下的供应商独立 profile。
 
-如果隔离 profile 里的 Claude Code 需要访问你平时的 SSH 或 Git 配置，只把真正
-需要的文件链接或复制到对应供应商的 profile home 中。
+因为只覆盖了 `CLAUDE_CONFIG_DIR`，每个供应商会话里你平时的 SSH、Git、shell
+配置都直接可用，不需要额外链接文件。
+
+## 跨供应商共享会话
+
+默认情况下各供应商的会话历史互相隔离，`ccglm` 里的 `--resume` 看不到
+`cckimi` 开始的对话。会话转录是
+`<配置目录>/projects/<项目slug>/<session-id>.jsonl` 的纯 JSONL 文件，与模型
+无关。如果想跨供应商接续会话（一个供应商开工、另一个供应商续接），把所有
+profile 的 `projects` 目录指向同一个共享位置即可：
+
+```bash
+mkdir -p ~/.claude-profiles/shared
+mv ~/.claude-profiles/homes/glm/.claude/projects ~/.claude-profiles/shared/projects
+for p in glm minimax local deepseek kimi; do
+  mkdir -p ~/.claude-profiles/homes/$p/.claude
+  rsync -a --ignore-existing ~/.claude-profiles/homes/$p/.claude/projects/ ~/.claude-profiles/shared/projects/ 2>/dev/null || true
+  rm -rf ~/.claude-profiles/homes/$p/.claude/projects
+  ln -s ~/.claude-profiles/shared/projects ~/.claude-profiles/homes/$p/.claude/projects
+done
+```
+
+之后任何供应商都能 `--resume` / `--continue` 其他供应商开始的会话（需在同一
+工作目录下），完整历史会重放给新的后端。注意事项：
+
+- 操作时确保没有正在运行的供应商会话，并在确认合并无误前保留各
+  `projects` 目录的备份。
+- 项目级 auto-memory 也在 `projects/` 下，所以记忆也会随之共享——通常这正是
+  想要的效果。
+- 长会话在上下文窗口较小的后端上可能放不下；计划内的交接更推荐写一份简短的
+  交接文档，而不是重放整段转录。
+- `settings.json`、token、`/model` 状态仍然完全隔离。
 
 ## 环境变量覆盖
 

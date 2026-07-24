@@ -13,6 +13,7 @@ ln -sf "$target_bin/cc-provider" "$target_bin/ccglm"
 ln -sf "$target_bin/cc-provider" "$target_bin/ccminimax"
 ln -sf "$target_bin/cc-provider" "$target_bin/cclocal"
 ln -sf "$target_bin/cc-provider" "$target_bin/ccdeepseek"
+ln -sf "$target_bin/cc-provider" "$target_bin/cckimi"
 
 if [[ ! -f "$profile_dir/providers.json" ]]; then
   cp "$script_dir/providers.example.json" "$profile_dir/providers.json"

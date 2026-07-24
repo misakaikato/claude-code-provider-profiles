@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REAL_HOME="${CLAUDE_REAL_HOME:-$HOME}"
-PROFILES_DIR="${CLAUDE_PROFILES_DIR:-$REAL_HOME/.claude-profiles}"
+PROFILES_DIR="${CLAUDE_PROFILES_DIR:-$HOME/.claude-profiles}"
 CONFIG_FILE="${CLAUDE_PROVIDERS_CONFIG:-$PROFILES_DIR/providers.json}"
 CLAUDE_BIN="${CLAUDE_CODE_BIN:-$(command -v claude || true)}"
 
@@ -14,6 +13,7 @@ case "$command_name" in
   ccminimax) provider="minimax" ;;
   cclocal) provider="local" ;;
   ccdeepseek) provider="deepseek" ;;
+  cckimi) provider="kimi" ;;
 esac
 
 if [[ "$command_name" == "cc-provider" ]]; then
@@ -25,6 +25,7 @@ Usage:
   ccminimax [claude args...]
   cclocal [claude args...]
   ccdeepseek [claude args...]
+  cckimi [claude args...]
 
 Config:
   $CONFIG_FILE
@@ -32,14 +33,9 @@ Config:
 Provider schema:
   {
     "glm": {
-      "settings": {
-        "env": {
-          "ANTHROPIC_AUTH_TOKEN": "...",
-          "ANTHROPIC_BASE_URL": "...",
-          "ANTHROPIC_MODEL": "..."
-        }
-      },
-      "global": {}
+      "env": { "ANTHROPIC_AUTH_TOKEN": "...", "ANTHROPIC_BASE_URL": "..." },
+      "settings": { "env": { ... }, "permissions": { ... } },
+      "global": { ... }
     }
   }
 
@@ -51,7 +47,7 @@ EOF
 fi
 
 if [[ -z "$provider" ]]; then
-  echo "Missing provider. Use one of: glm, minimax, local, deepseek." >&2
+  echo "Missing provider. Use one of: glm, minimax, local, deepseek, kimi." >&2
   exit 2
 fi
 
@@ -77,11 +73,20 @@ if ! jq -e --arg provider "$provider" 'has($provider) and (.[$provider] | type =
   exit 2
 fi
 
-profile_home="$PROFILES_DIR/homes/$provider"
-mkdir -p "$profile_home/.claude"
+# Isolate per-provider config via the official CLAUDE_CONFIG_DIR variable while
+# keeping the real HOME: git/ssh/shell profile/keychain all keep working. The
+# directory layout matches the old HOME-swap versions so session history is kept.
+config_dir="$PROFILES_DIR/homes/$provider/.claude"
+mkdir -p "$config_dir"
 
-settings_file="$profile_home/.claude/settings.json"
-global_file="$profile_home/.claude.json"
+settings_file="$config_dir/settings.json"
+global_file="$config_dir/.claude.json"
+
+# Older versions kept the global file at the profile home root; migrate it in.
+legacy_global="$PROFILES_DIR/homes/$provider/.claude.json"
+if [[ -f "$legacy_global" && ! -f "$global_file" ]]; then
+  mv "$legacy_global" "$global_file"
+fi
 
 merge_json_file() {
   local target_file="$1"
@@ -177,7 +182,7 @@ done < <(
   ' "$CONFIG_FILE"
 )
 
-export HOME="$profile_home"
+export CLAUDE_CONFIG_DIR="$config_dir"
 export CLAUDE_PROVIDER="$provider"
 
 exec "$CLAUDE_BIN" "$@"
